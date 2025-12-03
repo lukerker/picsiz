@@ -3,332 +3,373 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>圖片尺寸調整工具 (Image Resizer)</title>
+    <title>圖片像素/裁切/縮放 工具</title>
+    <!-- 引入 Cropper.js 樣式 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
+    <!-- 引入 Tailwind CSS (為了快速做出好看的介面) -->
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        :root {
-            --primary-color: #4a90e2;
-            --bg-color: #f5f7fa;
-            --card-bg: #ffffff;
-            --text-color: #333;
+        body { background-color: #f3f3f3; height: 100vh; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
+        
+        /* 編輯區域樣式 */
+        .editor-container {
+            display: flex;
+            height: 100vh;
         }
 
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-color);
+        .canvas-area {
+            flex: 1;
+            background-color: #e5e5e5; /* 類似截圖的灰色背景 */
+            background-image: 
+                linear-gradient(45deg, #ddd 25%, transparent 25%), 
+                linear-gradient(-45deg, #ddd 25%, transparent 25%), 
+                linear-gradient(45deg, transparent 75%, #ddd 75%), 
+                linear-gradient(-45deg, transparent 75%, #ddd 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
             display: flex;
             justify-content: center;
             align-items: center;
-            min-height: 100vh;
-            margin: 0;
-            padding: 20px;
+            padding: 40px;
+            position: relative;
         }
 
-        .container {
-            background-color: var(--card-bg);
-            padding: 30px;
-            border-radius: 12px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-            width: 100%;
-            max-width: 500px;
-            text-align: center;
-        }
-
-        h1 {
-            margin-top: 0;
-            font-size: 24px;
-            color: var(--primary-color);
-        }
-
-        .upload-area {
-            border: 2px dashed #ddd;
-            padding: 20px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            cursor: pointer;
-            transition: border-color 0.3s;
-        }
-
-        .upload-area:hover {
-            border-color: var(--primary-color);
-        }
-
-        input[type="file"] {
-            display: none;
-        }
-
-        .custom-file-upload {
-            display: inline-block;
-            padding: 10px 20px;
-            background-color: #e1e1e1;
-            border-radius: 5px;
-            cursor: pointer;
-            font-weight: bold;
-        }
-
-        .controls {
-            display: flex;
-            gap: 10px;
-            justify-content: center;
-            align-items: center;
-            margin-bottom: 15px;
-            flex-wrap: wrap;
-        }
-
-        .input-group {
+        .controls-area {
+            width: 320px;
+            background-color: white;
+            padding: 24px;
+            box-shadow: -2px 0 10px rgba(0,0,0,0.05);
             display: flex;
             flex-direction: column;
-            align-items: flex-start;
+            gap: 20px;
+            overflow-y: auto;
+            z-index: 10;
         }
 
-        .input-group label {
-            font-size: 12px;
-            margin-bottom: 4px;
-            color: #666;
-        }
-
-        input[type="number"] {
-            padding: 8px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            width: 80px;
-            text-align: center;
-        }
-
-        .checkbox-group {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            margin-top: 15px;
-            font-size: 14px;
-        }
-
-        button {
-            background-color: var(--primary-color);
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 16px;
-            transition: background 0.3s;
-            margin-top: 10px;
-            width: 100%;
-        }
-
-        button:hover {
-            background-color: #357abd;
-        }
-
-        button:disabled {
-            background-color: #ccc;
-            cursor: not-allowed;
-        }
-
-        .preview-area {
-            margin-top: 20px;
-            display: none; /* Hidden by default */
-            border-top: 1px solid #eee;
-            padding-top: 20px;
-        }
-
-        .preview-area img {
+        /* 圖片最大限制 */
+        #image {
             max-width: 100%;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            margin-bottom: 15px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            display: block;
         }
 
-        .download-btn {
-            display: inline-block;
-            text-decoration: none;
-            background-color: #2ecc71;
-            color: white;
-            padding: 10px 20px;
-            border-radius: 5px;
-            width: 100%;
-            box-sizing: border-box;
+        /* 輸入框樣式優化 */
+        .input-group {
+            position: relative;
         }
-        
-        .download-btn:hover {
-            background-color: #27ae60;
-        }
-
-        .file-info {
-            margin-top: 10px;
-            font-size: 14px;
+        .unit-label {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
             color: #888;
+            font-size: 0.8rem;
         }
+
+        /* 隱藏原生檔案上傳 */
+        input[type="file"] { display: none; }
+
+        /* 鎖頭按鈕樣式 */
+        .lock-btn.active { color: #3b82f6; background-color: #eff6ff; border-color: #3b82f6; }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h1>圖片尺寸調整工具</h1>
-    
-    <!-- 上傳區 -->
-    <div class="upload-area" id="dropZone">
-        <label for="fileInput" class="custom-file-upload">
-            選擇圖片
-        </label>
-        <input type="file" id="fileInput" accept="image/*">
-        <p class="file-info" id="fileInfo">尚未選擇檔案</p>
-    </div>
-
-    <!-- 控制區 -->
-    <div class="controls">
-        <div class="input-group">
-            <label for="widthInput">寬度 (px)</label>
-            <input type="number" id="widthInput" placeholder="寬度">
+<div class="editor-container">
+    <!-- 左側：畫布區 -->
+    <div class="canvas-area" id="dropZone">
+        <!-- 尚未上傳時的提示 -->
+        <div id="uploadPrompt" class="text-center cursor-pointer p-10 border-2 border-dashed border-gray-400 rounded-lg hover:border-blue-500 transition">
+            <svg class="w-12 h-12 mx-auto text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+            <p class="mt-2 text-gray-600 font-bold">點擊上傳 或 拖曳圖片至此</p>
+            <p class="text-sm text-gray-400">支援貼上 (Ctrl+V)</p>
         </div>
-        <div style="padding-top: 20px;">X</div>
-        <div class="input-group">
-            <label for="heightInput">高度 (px)</label>
-            <input type="number" id="heightInput" placeholder="高度">
+        
+        <!-- 圖片顯示區 -->
+        <div style="max-height: 90%; max-width: 90%;">
+            <img id="image" src="" alt="">
+        </div>
+
+        <!-- 縮放滑桿 (浮動在下方) -->
+        <div id="zoomControl" class="absolute bottom-8 left-1/2 transform -translate-x-1/2 bg-white px-4 py-2 rounded-full shadow-lg flex items-center gap-3 hidden">
+            <span class="text-xs text-gray-500">縮放</span>
+            <input type="range" id="zoomSlider" min="0.1" max="3" step="0.1" value="1" class="w-48 accent-blue-600 cursor-pointer">
         </div>
     </div>
 
-    <div class="checkbox-group">
-        <input type="checkbox" id="aspectRatio" checked>
-        <label for="aspectRatio">鎖定長寬比例</label>
-    </div>
+    <!-- 右側：控制面板 -->
+    <div class="controls-area">
+        <h2 class="text-lg font-bold text-gray-800">外觀與尺寸</h2>
+        
+        <!-- 1. 預設比例 -->
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">裁切比例</label>
+            <select id="aspectRatioSelect" class="w-full border border-gray-300 rounded-md p-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                <option value="NaN">自訂 (自由拖拉)</option>
+                <option value="1">1:1 (正方形/IG)</option>
+                <option value="1.7777">16:9 (YouTube/螢幕)</option>
+                <option value="1.3333">4:3 (相機標準)</option>
+                <option value="0.6666">2:3 (Pinterest)</option>
+                <option value="0.8">4:5 (IG 直式)</option>
+            </select>
+        </div>
 
-    <button id="resizeBtn" disabled>開始轉換並預覽</button>
+        <hr class="border-gray-200">
 
-    <!-- 結果區 -->
-    <div class="preview-area" id="previewArea">
-        <h3>預覽結果</h3>
-        <p id="resultDims" style="font-size: 12px; color: #666;"></p>
-        <img id="previewImg" src="" alt="Resized Image">
-        <a id="downloadLink" class="download-btn" download="resized-image.png">下載圖片</a>
+        <!-- 2. 尺寸輸入 -->
+        <div>
+            <div class="flex justify-between items-center mb-1">
+                <label class="block text-sm font-medium text-gray-700">輸出尺寸 (px)</label>
+                <button id="resetCropBtn" class="text-xs text-blue-600 hover:underline hidden">重設裁切框</button>
+            </div>
+            
+            <div class="flex items-center gap-2">
+                <div class="input-group flex-1">
+                    <input type="number" id="widthInput" class="w-full border border-gray-300 rounded-md p-2 pr-8 text-sm text-center" placeholder="寬">
+                    <span class="unit-label">W</span>
+                </div>
+                
+                <!-- 鎖定比例按鈕 -->
+                <button id="lockRatioBtn" class="lock-btn p-2 border border-gray-300 rounded-md text-gray-500 hover:bg-gray-50 transition active" title="鎖定長寬比">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                </button>
+
+                <div class="input-group flex-1">
+                    <input type="number" id="heightInput" class="w-full border border-gray-300 rounded-md p-2 pr-8 text-sm text-center" placeholder="高">
+                    <span class="unit-label">H</span>
+                </div>
+            </div>
+            
+            <!-- 預設常用尺寸按鈕 -->
+            <div class="mt-3 flex flex-wrap gap-2">
+                <button onclick="setDims(192,192)" class="px-2 py-1 bg-gray-100 text-xs rounded hover:bg-gray-200 text-gray-600">Icon 192</button>
+                <button onclick="setDims(1080,1080)" class="px-2 py-1 bg-gray-100 text-xs rounded hover:bg-gray-200 text-gray-600">IG 1080</button>
+                <button onclick="setDims(1200,630)" class="px-2 py-1 bg-gray-100 text-xs rounded hover:bg-gray-200 text-gray-600">FB Link</button>
+            </div>
+        </div>
+
+        <div class="flex-1"></div> <!-- Spacer -->
+
+        <!-- 3. 下載與操作 -->
+        <div class="bg-gray-50 p-4 -mx-6 -mb-6 border-t border-gray-200">
+            <div class="flex justify-between items-center mb-3">
+                 <label class="text-sm text-gray-600">格式:</label>
+                 <select id="formatSelect" class="border border-gray-300 rounded p-1 text-sm">
+                     <option value="image/png">PNG (推薦)</option>
+                     <option value="image/jpeg">JPG</option>
+                     <option value="image/webp">WebP</option>
+                 </select>
+            </div>
+            
+            <button id="downloadBtn" disabled class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg shadow transition flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                下載圖片
+            </button>
+        </div>
     </div>
 </div>
 
+<input type="file" id="fileInput" accept="image/*">
+
+<!-- 引入 Cropper.js 邏輯 -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
 <script>
+    // DOM 元素
     const fileInput = document.getElementById('fileInput');
+    const image = document.getElementById('image');
+    const uploadPrompt = document.getElementById('uploadPrompt');
+    const downloadBtn = document.getElementById('downloadBtn');
     const widthInput = document.getElementById('widthInput');
     const heightInput = document.getElementById('heightInput');
-    const aspectRatioCheckbox = document.getElementById('aspectRatio');
-    const resizeBtn = document.getElementById('resizeBtn');
-    const previewArea = document.getElementById('previewArea');
-    const previewImg = document.getElementById('previewImg');
-    const downloadLink = document.getElementById('downloadLink');
-    const fileInfo = document.getElementById('fileInfo');
-    
-    let originalImage = new Image();
-    let originalRatio = 0;
-    let fileName = '';
+    const aspectRatioSelect = document.getElementById('aspectRatioSelect');
+    const lockRatioBtn = document.getElementById('lockRatioBtn');
+    const zoomSlider = document.getElementById('zoomControl');
+    const sliderInput = document.getElementById('zoomSlider');
+    const formatSelect = document.getElementById('formatSelect');
 
-    // 1. 處理檔案上傳
-    fileInput.addEventListener('change', function(e) {
-        const file = e.target.files[0];
-        if (file) {
-            handleFile(file);
-        }
+    let cropper;
+    let originalFileName = 'image';
+    let isLocked = true; // 預設鎖定比例
+
+    // 1. 初始化上傳功能
+    uploadPrompt.addEventListener('click', () => fileInput.click());
+
+    fileInput.addEventListener('change', (e) => {
+        if (e.target.files.length) startCropper(e.target.files[0]);
     });
 
-    function handleFile(file) {
-        fileName = file.name.split('.')[0]; // 取得檔名不含副檔名
-        fileInfo.textContent = `已選擇: ${file.name}`;
+    // 拖放功能
+    const dropZone = document.getElementById('dropZone');
+    dropZone.addEventListener('dragover', (e) => e.preventDefault());
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        if (e.dataTransfer.files.length) startCropper(e.dataTransfer.files[0]);
+    });
+
+    // 剪貼簿貼上 (Ctrl+V)
+    document.addEventListener('paste', (e) => {
+        if (e.clipboardData.files.length) startCropper(e.clipboardData.files[0]);
+    });
+
+    function startCropper(file) {
+        if (!file.type.startsWith('image/')) return;
+        
+        originalFileName = file.name.split('.')[0];
         
         const reader = new FileReader();
-        reader.onload = function(event) {
-            originalImage.src = event.target.result;
-            originalImage.onload = function() {
-                // 初始化數值
-                widthInput.value = originalImage.width;
-                heightInput.value = originalImage.height;
-                originalRatio = originalImage.width / originalImage.height;
-                
-                resizeBtn.disabled = false; // 啟用按鈕
-                previewArea.style.display = 'none'; // 隱藏舊的預覽
-            }
+        reader.onload = (e) => {
+            image.src = e.target.result;
+            uploadPrompt.style.display = 'none';
+            zoomSlider.classList.remove('hidden');
+            downloadBtn.disabled = false;
+            
+            // 如果已經有 cropper，先銷毀
+            if (cropper) cropper.destroy();
+
+            // 初始化 Cropper.js
+            cropper = new Cropper(image, {
+                viewMode: 1, // 限制裁切框不超過畫布
+                dragMode: 'move', // 可以拖動圖片
+                autoCropArea: 0.8, // 預設裁切框大小
+                restore: false,
+                guides: true, // 顯示九宮格
+                center: true,
+                highlight: false,
+                cropBoxMovable: true,
+                cropBoxResizable: true,
+                toggleDragModeOnDblclick: false,
+                ready: function () {
+                    // 初始化輸入框數值 (顯示當前裁切框對應的真實像素)
+                    updateInputValues();
+                },
+                crop: function (event) {
+                    // 當裁切框改變時，這裡暫不更新 Input，避免打字時跳動
+                    // 我們改用 input 事件去更新 cropper
+                },
+                zoom: function(event) {
+                   sliderInput.value = event.detail.ratio;
+                }
+            });
         };
         reader.readAsDataURL(file);
     }
 
-    // 2. 處理長寬比連動
-    widthInput.addEventListener('input', function() {
-        if (aspectRatioCheckbox.checked && originalRatio > 0) {
-            heightInput.value = Math.round(widthInput.value / originalRatio);
+    // 2. 數值連動邏輯
+    
+    // 更新 Input 顯示當前裁切後的尺寸 (這是一個估算值，基於原圖比例)
+    function updateInputValues() {
+        const data = cropper.getData();
+        widthInput.value = Math.round(data.width);
+        heightInput.value = Math.round(data.height);
+    }
+
+    // 當使用者輸入寬度
+    widthInput.addEventListener('change', function() {
+        if (!cropper) return;
+        const newWidth = parseInt(this.value);
+        let newHeight = heightInput.value;
+
+        if (isLocked) {
+            const data = cropper.getData();
+            const ratio = data.height / data.width;
+            newHeight = Math.round(newWidth * ratio);
+            heightInput.value = newHeight;
         }
+
+        cropper.setData({ width: newWidth, height: parseInt(newHeight) });
     });
 
-    heightInput.addEventListener('input', function() {
-        if (aspectRatioCheckbox.checked && originalRatio > 0) {
-            widthInput.value = Math.round(heightInput.value * originalRatio);
+    // 當使用者輸入高度
+    heightInput.addEventListener('change', function() {
+        if (!cropper) return;
+        const newHeight = parseInt(this.value);
+        let newWidth = widthInput.value;
+
+        if (isLocked) {
+            const data = cropper.getData();
+            const ratio = data.width / data.height;
+            newWidth = Math.round(newHeight * ratio);
+            widthInput.value = newWidth;
         }
+
+        cropper.setData({ width: parseInt(newWidth), height: newHeight });
     });
 
-    // 3. 執行轉換
-    resizeBtn.addEventListener('click', function() {
+    // 3. 控制項邏輯
+
+    // 比例鎖定
+    lockRatioBtn.addEventListener('click', () => {
+        isLocked = !isLocked;
+        lockRatioBtn.classList.toggle('active');
+        // 更改圖標樣式
+        lockRatioBtn.innerHTML = isLocked 
+            ? '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>'
+            : '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" /></svg>';
+    });
+
+    // 裁切比例選單 (Instagram, 16:9 etc)
+    aspectRatioSelect.addEventListener('change', function() {
+        if (!cropper) return;
+        const value = parseFloat(this.value);
+        cropper.setAspectRatio(value);
+    });
+
+    // 縮放滑桿
+    sliderInput.addEventListener('input', function() {
+        if (!cropper) return;
+        cropper.zoomTo(parseFloat(this.value));
+    });
+
+    // 快速按鈕功能
+    window.setDims = function(w, h) {
+        if (!cropper) return;
+        
+        // 解鎖以便設定特定尺寸
+        if(isLocked) lockRatioBtn.click(); 
+        
+        widthInput.value = w;
+        heightInput.value = h;
+        cropper.setData({ width: w, height: h });
+        
+        // 嘗試設定比例
+        aspectRatioSelect.value = "NaN";
+        cropper.setAspectRatio(NaN);
+    }
+
+    // 4. 下載功能
+    downloadBtn.addEventListener('click', () => {
+        if (!cropper) return;
+
+        // 取得使用者輸入的最終尺寸
         const targetWidth = parseInt(widthInput.value);
         const targetHeight = parseInt(heightInput.value);
+        const format = formatSelect.value;
+        const ext = format === 'image/jpeg' ? 'jpg' : (format === 'image/webp' ? 'webp' : 'png');
 
-        if (!targetWidth || !targetHeight) {
-            alert('請輸入有效的寬度和高度');
-            return;
-        }
+        // 產生 Canvas
+        const canvas = cropper.getCroppedCanvas({
+            width: targetWidth,
+            height: targetHeight,
+            imageSmoothingEnabled: true,
+            imageSmoothingQuality: 'high',
+        });
 
-        // 創建 Canvas 進行繪圖
-        const canvas = document.createElement('canvas');
-        canvas.width = targetWidth;
-        canvas.height = targetHeight;
-        const ctx = canvas.getContext('2d');
-
-        // 優化圖片品質
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-
-        // 將圖片畫入 Canvas 並縮放
-        ctx.drawImage(originalImage, 0, 0, targetWidth, targetHeight);
-
-        // 輸出圖片
-        const dataUrl = canvas.toDataURL('image/png'); // 預設輸出 PNG 以支援透明背景
-
-        // 更新預覽
-        previewImg.src = dataUrl;
-        document.getElementById('resultDims').textContent = `尺寸: ${targetWidth} x ${targetHeight}`;
-        
-        // 更新下載連結
-        downloadLink.href = dataUrl;
-        downloadLink.download = `${fileName}-${targetWidth}x${targetHeight}.png`;
-
-        // 顯示結果區
-        previewArea.style.display = 'block';
-        
-        // 自動捲動到底部
-        previewArea.scrollIntoView({ behavior: 'smooth' });
-    });
-
-    // 支援拖放檔案 (Drag and Drop)
-    const dropZone = document.getElementById('dropZone');
-    
-    dropZone.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        dropZone.style.borderColor = '#4a90e2';
-        dropZone.style.backgroundColor = '#f0f8ff';
-    });
-
-    dropZone.addEventListener('dragleave', (e) => {
-        e.preventDefault();
-        dropZone.style.borderColor = '#ddd';
-        dropZone.style.backgroundColor = 'transparent';
-    });
-
-    dropZone.addEventListener('drop', (e) => {
-        e.preventDefault();
-        dropZone.style.borderColor = '#ddd';
-        dropZone.style.backgroundColor = 'transparent';
-        
-        if (e.dataTransfer.files.length > 0) {
-            fileInput.files = e.dataTransfer.files; // 將檔案指派給 input
-            handleFile(e.dataTransfer.files[0]);
-        }
+        // 轉為 Blob 並下載
+        canvas.toBlob((blob) => {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${originalFileName}_${targetWidth}x${targetHeight}.${ext}`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }, format, 0.95); // 0.95 品質
     });
 
 </script>
-
 </body>
 </html>
